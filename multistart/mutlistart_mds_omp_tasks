@@ -56,9 +56,9 @@ int main(int argc, char *argv[])
     double theta = 0.25;
     double delta = 0.25;
 
-    double startpt[MAXVARS], endpt[MAXVARS];    /* initial and final point of mds */
-    double fx;    /* function value at the final point of mds */
-    int nt, nf;    /* number of iterations and function evaluations used by mds */
+    //double startpt[MAXVARS], endpt[MAXVARS];    /* initial and final point of mds */
+    //double fx;    /* function value at the final point of mds */
+    //int nt, nf;    /* number of iterations and function evaluations used by mds */
 
     /* information about the best point found by multistart */
     double best_pt[MAXVARS];
