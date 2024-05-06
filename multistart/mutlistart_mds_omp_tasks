@@ -86,42 +86,39 @@ t0 = get_wtime();
     {
         for (trial = 0; trial < ntrials; trial++) {
             // Each iteration of the loop is a separate task
-            #pragma omp task firstprivate(trial)
+            #pragma omp task firstprivate(trial, startpt, endpt, fx, nt, nf)
             {
-                double private_startpt[MAXVARS], private_endpt[MAXVARS];
-                double private_fx;
-                int private_nt, private_nf;
 
                 srand48_r(trial, &rand_buffer); // Initialize random number generator
 
                 // Starting guess for rosenbrock test function, search space in [-2, 2)
                 for (i = 0; i < nvars; i++) {
-                    private_startpt[i] = lower[i] + (upper[i] - lower[i]) * drand48();
+                    startpt[i] = lower[i] + (upper[i] - lower[i]) * drand48();
                 }
 
                 int term = -1;
-                mds(private_startpt, private_endpt, nvars, &private_fx, eps, maxfevals, maxiter, mu, theta, delta,
-                    &private_nt, &private_nf, lower, upper, &term);
+                mds(startpt, endpt, nvars, &fx, eps, maxfevals, maxiter, mu, theta, delta,
+                    &nt, &nf, lower, upper, &term);
 
                 // Keep the best solution
                 #pragma omp critical
                 {
-                    if (private_fx < best_fx) {
+                    if (fx < best_fx) {
                         best_trial = trial;
-                        best_nt = private_nt;
-                        best_nf = private_nf;
-                        best_fx = private_fx;
+                        best_nt = nt;
+                        best_nf = nf;
+                        best_fx = fx;
                         for (i = 0; i < nvars; i++)
-                            best_pt[i] = private_endpt[i];
+                            best_pt[i] = endpt[i];
                     }
                 }
 		
 		#pragma omp critical
                 {
-                    printf("\n\nMDS %d USED %d ITERATIONS AND %d FUNCTION CALLS, AND RETURNED\n", trial, private_nt, private_nf);
+                    printf("\n\nMDS %d USED %d ITERATIONS AND %d FUNCTION CALLS, AND RETURNED\n", trial, nt, nf);
                     for (i = 0; i < nvars; i++)
-                        printf("x[%3d] = %15.7le \n", i, private_endpt[i]);
-                    printf("f(x) = %15.7le\n", private_fx);
+                        printf("x[%3d] = %15.7le \n", i, endpt[i]);
+                    printf("f(x) = %15.7le\n", fx);
                 }
 
 
