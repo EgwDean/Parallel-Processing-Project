@@ -75,10 +75,7 @@ int main(int argc, char *argv[])
     for (i = 0; i < MAXVARS; i++) lower[i] = -2.0;    /* lower bound: -2.0 */
     for (i = 0; i < MAXVARS; i++) upper[i] = +2.0;    /* upper bound: +2.0 */
 
- // Declare rand_buffer
-    struct drand48_data rand_buffer;
-
-t0 = get_wtime();
+	t0 = get_wtime();
 
 #pragma omp parallel
 {
@@ -92,7 +89,7 @@ t0 = get_wtime();
                 double private_fx;
                 int private_nt, private_nf;
 
-                srand48_r(trial, &rand_buffer); // Initialize random number generator
+                srand48(trial); 
 
                 // Starting guess for rosenbrock test function, search space in [-2, 2)
                 for (i = 0; i < nvars; i++) {
