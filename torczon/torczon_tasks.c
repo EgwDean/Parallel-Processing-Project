@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <omp.h>
 
 extern double f(double *x, int n);
 
@@ -126,164 +125,166 @@ int inbounds_simplex(double *s, int n, double *xl, double *xr) {
 }
 
 void mds(double *point, double *endpoint, int n, double *val, double eps, int maxfevals, int maxiter, double mu,
-    double theta, double delta, int *nit, int *nf, double *xl, double *xr, int *term) {
-    int i, j, k, found_better, iter, kec, terminate;
-    int out_of_bounds;
-    double *u, *r, *ec, *fu, *fr, *fec;
+		double theta, double delta, int *nit, int *nf, double *xl, double *xr, int *term) {
+	int i, j, k, found_better, iter, kec, terminate;
+	int out_of_bounds;
+	double *u, *r, *ec, *fu, *fr, *fec;
 
-    u = (double *) malloc(n * (n + 1) * sizeof(double));
-    r = (double *) malloc(n * (n + 1) * sizeof(double));
-    ec = (double *) malloc(n * (n + 1) * sizeof(double));
-    fu = (double *) malloc((n + 1) * sizeof(double));
-    fr = (double *) malloc((n + 1) * sizeof(double));
-    fec = (double *) malloc((n + 1) * sizeof(double));
+	u = (double *) malloc(n * (n + 1) * sizeof(double));
+	r = (double *) malloc(n * (n + 1) * sizeof(double));
+	ec = (double *) malloc(n * (n + 1) * sizeof(double));
+	fu = (double *) malloc((n + 1) * sizeof(double));
+	fr = (double *) malloc((n + 1) * sizeof(double));
+	fec = (double *) malloc((n + 1) * sizeof(double));
 
-    iter = 0;
-    *term = 0;
+	iter = 0;
+	*term = 0;
 
-    *nf = 0;
-    initialize_simplex(u, n, point, delta);
+	*nf = 0;
+	initialize_simplex(u, n, point, delta);
 
-    #pragma omp parallel private(i) shared(u, fu, n, nf) // Παραλληλοποίηση της εναρμόνισης
-    {
-        #pragma omp for
-        for (i = 0; i < n + 1; i++) {
-            fu[i] = f(&u[i * n], n);
-            #pragma omp critical
-            *nf = *nf + 1;
-        }
-    }
+	for (i = 0; i < n + 1; i++) {
+			fu[i] = f(&u[i * n], n);
+			*nf = *nf + 1;
+	}
 
-    k = minimum_simplex(fu, n);
-    swap_simplex(u, fu, n, k, 0);
-    *val = fu[0];
-    terminate = 0;
-    iter = 0;
-    while (terminate == 0 && iter < maxiter) {
-        k = minimum_simplex(fu, n);
-        swap_simplex(u, fu, n, k, 0);
+	k = minimum_simplex(fu, n);
+	swap_simplex(u, fu, n, k, 0);
+	*val = fu[0];
+	terminate = 0;
+	iter = 0;
+	while (terminate == 0 && iter < maxiter) {
+		k = minimum_simplex(fu, n);
+		swap_simplex(u, fu, n, k, 0);
+		//	print_simplex(u, fu, n);
+		//	printf("iter : %i Val: %f, Simplex size = %f  \n", iter, fu[0], simplex_size(u, n));
 
-        found_better = 0;
-        while (found_better == 0) {
-            if (*nf > maxfevals) {
-                *term = 1;
-                terminate = 1;
-                break;
-            }
+		found_better = 0;
+		while (found_better == 0) {
+			if (*nf > maxfevals) {
+				*term = 1;
+				terminate = 1;
+				break;
+			}
 
-            if (simplex_size(u, n) < eps) {
-                *term = 2;
-                terminate = 1;
-                break;
-            }
+			if (simplex_size(u, n) < eps) {
+				*term = 2;
+				terminate = 1;
+				break;
+			}
 
-            // rotation step
-            fr[0] = fu[0];
-            found_better = 1;
-            for (i = 1; i < n + 1; i++) {
-                for (j = 0; j < n; j++) {
-                    r[i * n + j] = u[0 * n + j] - (u[i * n + j] - u[0 * n + j]);
-                    if (r[i * n + j] > xr[j] || r[i * n + j] < xl[j]) {
-                        found_better = 0;
-                        break;
-                    }
-                }
-                if (found_better == 0)
-                    break;
-            }
+			// rotation step
+			fr[0] = fu[0];
+			// Check rotation prior to function evaluation
+			// Consider failure when out of bounds so set found_better = 0
+			// when out of bounds!!!
+			found_better = 1;
+			for (i = 1; i < n + 1; i++) {
+				for (j = 0; j < n; j++) {
+					r[i * n + j] = u[0 * n + j] - (u[i * n + j] - u[0 * n + j]);
+					if (r[i * n + j] > xr[j] || r[i * n + j] < xl[j]) {
+						found_better = 0;
+						break;
+					}
+				}
+				if (found_better == 0)
+					break;
+			}
 
-            if (found_better == 1) {
-                #pragma omp parallel private(i) shared(fr, r, u, nf) // Παραλληλοποίηση της αξιολόγησης
-                {
-                    #pragma omp for
-                    for (i = 1; i < n + 1; i++) {
-                        for (j = 0; j < n; j++) {
-                            r[i * n + j] = u[0 * n + j] - (u[i * n + j] - u[0 * n + j]);
-                        }
-                        fr[i] = f(&r[i * n], n);
-                        #pragma omp critical
-                        *nf = *nf + 1;
-                    }
-                }
+			if (found_better == 1) {
+				for (i = 1; i < n + 1; i++) {
+					for (j = 0; j < n; j++) {
+						r[i * n + j] = u[0 * n + j] - (u[i * n + j] - u[0 * n + j]);
+					}
 
-                found_better = 0;
+					fr[i] = f(&r[i * n], n);
+					*nf = *nf + 1;
+				}
 
-                k = minimum_simplex(fr, n);
-                if (fr[k] < fu[0])
-                    found_better = 1;
+				// By default we haven't found better yet!!!
+				found_better = 0;
 
-            } // end found_better
+				k = minimum_simplex(fr, n);
+				if (fr[k] < fu[0])
+					found_better = 1;
 
-            if (found_better == 1) {
-                out_of_bounds = 0;
-                #pragma omp parallel for private(i, j) shared(ec) reduction(&& : out_of_bounds) // Παραλληλοποίηση του ελέγχου ορίων
-                for (i = 1; i < n + 1; i++) {
-                    for (j = 0; j < n; j++) {
-                        ec[i * n + j] = u[0 * n + j] - mu * ((u[i * n + j] - u[0 * n + j]));
-                        if (ec[i * n + j] > xr[j] || ec[i * n + j] < xl[j]) {
-                            out_of_bounds = 1;
-                            break;
-                        }
-                    }
-                }
+			} // end found_better
 
-                if (out_of_bounds == 0) {
-                    fec[0] = fu[0];
-                    #pragma omp parallel for private(i, j) shared(ec, fec) // Παραλληλοποίηση της επέκτασης
-                    for (i = 1; i < n + 1; i++) {
-                        for (j = 0; j < n; j++) {
-                            ec[i * n + j] = u[0 * n + j] - mu * ((u[i * n + j] - u[0 * n + j]));
-                        }
-                        fec[i] = f(&ec[i * n], n);
-                        #pragma omp critical
-                        *nf = *nf + 1;
-                    }
+			if (found_better == 1) // expand
+			{
+				// Check expansion for out of bounds
+				out_of_bounds = 0;
+				for (i = 1; i < n + 1; i++) {
+					for (j = 0; j < n; j++) {
+						ec[i * n + j] = u[0 * n + j] - mu * ((u[i * n + j] - u[0 * n + j]));
+						if (ec[i * n + j] > xr[j] || ec[i * n + j] < xl[j]) {
+							out_of_bounds = 1;
+							break;
+						}
+					}
+					if (out_of_bounds == 1)
+						break;
+				}
+				// We now have the decision: if out_of_bounds = 0 proceed
+				// else proceed with the reflection (discard expansion)
+				if (out_of_bounds == 0) {
 
-                    kec = minimum_simplex(fec, n);
-                    if (fec[kec] < fr[k]) {
-                        assign_simplex(u, fu, ec, fec, n);
-                    } else {
-                        assign_simplex(u, fu, r, fr, n);
-                    }
-                } else {
-                    assign_simplex(u, fu, r, fr, n);
-                }
-            } else {
-                fec[0] = fu[0];
-                #pragma omp parallel for private(i, j) shared(ec, fec) // Παραλληλοποίηση της σύμπτυξης
-                for (i = 1; i < n + 1; i++) {
-                    for (j = 0; j < n; j++) {
-                        ec[i * n + j] = u[0 * n + j] + theta * ((u[i * n + j] - u[0 * n + j]));
-                    }
-                    fec[i] = f(&ec[i * n], n);
-                    #pragma omp critical
-                    *nf = *nf + 1;
-                }
+					fec[0] = fu[0];
+					for (i = 1; i < n + 1; i++) {
+						for (j = 0; j < n; j++) {
+							ec[i * n + j] = u[0 * n + j] - mu * ((u[i * n + j] - u[0 * n
+									+ j]));
+						}
+						fec[i] = f(&ec[i * n], n);
+						*nf = *nf + 1;
+					}
 
-                kec = minimum_simplex(fec, n);
-                if (fec[kec] < fu[0]) {
-                    found_better = 1;
-                }
-                assign_simplex(u, fu, ec, fec, n);
-            }
-        }
-        iter++;
-        if (iter == maxiter)
-            *term = 3;
-    } /* while */
+					kec = minimum_simplex(fec, n);
+					if (fec[kec] < fr[k]) {
+						assign_simplex(u, fu, ec, fec, n);
+					} else {
+						assign_simplex(u, fu, r, fr, n);
+					}
+				} else {
+					assign_simplex(u, fu, r, fr, n);
+				}
+			} else // contract
+			{
+				fec[0] = fu[0];
+				for (i = 1; i < n + 1; i++) {
+					for (j = 0; j < n; j++) {
+						ec[i * n + j] = u[0 * n + j] + theta * ((u[i * n + j]
+								- u[0 * n + j]));
+					}
+					fec[i] = f(&ec[i * n], n);
+					*nf = *nf + 1;
+				}
 
-    k = minimum_simplex(fu, n);
-    swap_simplex(u, fu, n, k, 0);
-    for (i = 0; i < n; i++)
-        endpoint[i] = u[i];
-    *val = fu[0];
-    *nit = iter;
+				kec = minimum_simplex(fec, n);
+				if (fec[kec] < fu[0]) {
+					found_better = 1;
+				}
+				assign_simplex(u, fu, ec, fec, n);
 
-    free(u);
-    free(r);
-    free(ec);
-    free(fu);
-    free(fr);
-    free(fec);
+			}
+
+		}
+		iter++;
+		if (iter == maxiter)
+			*term = 3;
+	} /* while */
+
+	k = minimum_simplex(fu, n);
+	swap_simplex(u, fu, n, k, 0);
+	for (i = 0; i < n; i++)
+		endpoint[i] = u[i];
+	*val = fu[0];
+  *nit = iter;
+
+	free(u);
+	free(r);
+	free(ec);
+	free(fu);
+	free(fr);
+	free(fec);
 }
-
